@@ -31,7 +31,7 @@ class Caption:
                     self.name = el['text']
 
         # Use "vssId" instead of "languageCode", fix issue #779
-        self.code = caption_track["vssId"]
+        self.code: str = caption_track["vssId"]
         # Remove preceding '.' for backwards compatibility, e.g.:
         # English -> vssId: .en, languageCode: en
         # English (auto-generated) -> vssId: a.en, languageCode: en
@@ -83,6 +83,11 @@ class Caption:
         return time_fmt + ms
 
     def generate_transcript(self) -> str:
+        """Generate textual captions.
+
+        Takes the xml captions from :meth:`~pytube.Caption.xml_captions` and
+        recompiles them into a plain text format.
+        """
         return self.xml_caption_to_transcript(self.xml_captions)
 
     def xml_caption_to_transcript(self, xml_captions: str) -> str:
@@ -98,9 +103,6 @@ class Caption:
         def append_segment(
             segments: List[str],
             caption: str,
-            start: float,
-            end: float,
-            sequence_number: int
         ) -> None:
 
             line = f"{caption}\n"
@@ -114,18 +116,11 @@ class Caption:
             if child is None:
                 raise AssertionError("XML caption doesn't have a <body> tag")
 
-            ps = child.findall('p')
-            for i in range(len(ps)):
-                p = ps[i]
-                start = float(p.attrib["t"])
+            for p in child.findall('p'):
                 text = reduce(lambda acc, s: acc + (s.text or ""), p.findall('s'), "")
                 caption = unescape(text.replace("\n", " ").replace("  ", " "))
-                if i + 1 < len(ps):
-                    end = float(ps[i + 1].attrib['t'])
-                else:
-                    end = float(p.attrib['d'])
                 if caption != "":
-                   append_segment(segments, caption, start, end, i + 1)
+                   append_segment(segments, caption)
         except:
             traceback.print_exc()
 
@@ -184,7 +179,8 @@ class Caption:
     def download(
         self,
         title: str,
-        format: Union[Literal['srt'], Literal['xml'], Literal['txt']] = 'srt',
+        srt: bool = True,
+        format: Optional[Union[Literal['srt'], Literal['xml'], Literal['txt']]] = 'srt',
         output_path: Optional[str] = None,
         filename_prefix: Optional[str] = None,
     ) -> str:
@@ -195,8 +191,11 @@ class Caption:
             If one is not specified, the default filename is used.
         :type title: str
         :param srt:
-            Set to True to download srt, false to download xml. Defaults to True.
-        :type srt bool
+            (deprecated) Set to True to download srt, false to download xml. Defaults to True.
+        :type srt: bool
+        :type format str
+            Download captions in srt, xml or txt format. Defaults to 'srt'.
+        :type srt: 'srt' or 'xml' or 'txt'
         :param output_path:
             (optional) Output path for writing media file. If one is not
             specified, defaults to the current working directory.

@@ -4,12 +4,13 @@ import argparse
 import gzip
 import json
 import logging
+from optparse import Option
 import os
 import shutil
 import sys
 import datetime as dt
 import subprocess  # nosec
-from typing import List, Optional
+from typing import List, Optional, Union, Literal
 
 import pytube.exceptions as exceptions
 from pytube import __version__
@@ -70,7 +71,8 @@ def _perform_args_on_youtube(
         download_by_itag(youtube=youtube, itag=args.itag, target=args.target)
     if args.caption_code:
         download_caption(
-            youtube=youtube, lang_code=args.caption_code, target=args.target
+            youtube=youtube, lang_code=args.caption_code, target=args.target,
+            format=args.caption_format or 'srt'
         )
     if args.resolution:
         download_by_resolution(
@@ -131,12 +133,19 @@ def _parse_args(
         help="Save the html and js to disk",
     )
     parser.add_argument(
+        "-cf",
+        "--caption-format",
+        type=str,
+        help=(
+            "Download srt or xml or txt captions for given language code. "
+        ),
+    )
+    parser.add_argument(
         "-c",
         "--caption-code",
         type=str,
         help=(
             "Download srt captions for given language code. "
-            "Prints available language codes if no argument given"
         ),
     )
     parser.add_argument(
@@ -499,7 +508,8 @@ def _print_available_captions(captions: CaptionQuery) -> None:
 
 
 def download_caption(
-    youtube: YouTube, lang_code: Optional[str], target: Optional[str] = None
+    youtube: YouTube, lang_code: Optional[str], target: Optional[str] = None,
+    format: Optional[Union[Literal['srt'], Literal['xml'], Literal['txt']]] = None,
 ) -> None:
     """Download a caption for the YouTube video.
 
@@ -515,7 +525,7 @@ def download_caption(
     try:
         caption = youtube.captions[lang_code]
         downloaded_path = caption.download(
-            title=youtube.title, output_path=target, format='txt'
+            title=youtube.title, output_path=target, format=format,
         )
         print(f"Saved caption file to: {downloaded_path}")
     except KeyError:
