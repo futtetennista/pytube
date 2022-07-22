@@ -515,7 +515,7 @@ def download_caption(
     try:
         caption = youtube.captions[lang_code]
         downloaded_path = caption.download(
-            title=youtube.title, output_path=target
+            title=youtube.title, output_path=target, format='txt'
         )
         print(f"Saved caption file to: {downloaded_path}")
     except KeyError:

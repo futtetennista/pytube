@@ -3,7 +3,7 @@ import os
 import time
 import xml.etree.ElementTree as ElementTree
 from html import unescape
-from typing import Dict, Optional, List
+from typing import Dict, Literal, Optional, List, Union
 
 from pytube import request
 from pytube.helpers import safe_filename, target_directory
@@ -51,6 +51,23 @@ class Caption:
         return self.xml_caption_to_srt(self.xml_captions)
 
     @staticmethod
+    def timestamp_to_srt_time_format(timestamp: float) -> str:
+        """Convert milliseconds durations into proper srt format.
+
+        :rtype: str
+        :returns:
+            SubRip Subtitle (str) formatted time duration.
+
+        float_to_srt_time_format(3890) -> '00:00:03,890'
+        """
+        # ms, secs = math.modf(timestamp / 1000)
+        # mins, secs_ = math.modf(secs / 60)
+        # hours, mins_ = math.modf(mins / 60)
+        # ms_ = f"{ms:.3f}".replace('0.', '')
+        # return f"{hours:02.0f}:{mins_:02.0f}:{secs_ if mins != 0 else secs:02.0f},{ms_}"
+        return Caption.float_to_srt_time_format(timestamp / 1000)
+
+    @staticmethod
     def float_to_srt_time_format(d: float) -> str:
         """Convert decimal durations into proper srt format.
 
@@ -64,6 +81,55 @@ class Caption:
         time_fmt = time.strftime("%H:%M:%S,", time.gmtime(whole))
         ms = f"{fraction:.3f}".replace("0.", "")
         return time_fmt + ms
+
+    def generate_transcript(self) -> str:
+        return self.xml_caption_to_transcript(self.xml_captions)
+
+    def xml_caption_to_transcript(self, xml_captions: str) -> str:
+        """Convert xml caption tracks to a plain text file".
+
+        :param str xml_captions:
+            XML formatted caption tracks.
+        """
+
+        import traceback
+        from functools import reduce
+
+        def append_segment(
+            segments: List[str],
+            caption: str,
+            start: float,
+            end: float,
+            sequence_number: int
+        ) -> None:
+
+            line = f"{caption}\n"
+            segments.append(line)
+
+        segments: List[str] = []
+        root = ElementTree.fromstring(xml_captions)
+
+        try:
+            child = root.find('body')
+            if child is None:
+                raise AssertionError("XML caption doesn't have a <body> tag")
+
+            ps = child.findall('p')
+            for i in range(len(ps)):
+                p = ps[i]
+                start = float(p.attrib["t"])
+                text = reduce(lambda acc, s: acc + (s.text or ""), p.findall('s'), "")
+                caption = unescape(text.replace("\n", " ").replace("  ", " "))
+                if i + 1 < len(ps):
+                    end = float(ps[i + 1].attrib['t'])
+                else:
+                    end = float(p.attrib['d'])
+                if caption != "":
+                   append_segment(segments, caption, start, end, i + 1)
+        except:
+            traceback.print_exc()
+
+        return "\n".join(segments).strip()
 
     def xml_caption_to_srt(self, xml_captions: str) -> str:
         """Convert xml caption tracks to "SubRip Subtitle (srt)".
@@ -85,29 +151,31 @@ class Caption:
 
             line = "{seq}\n{start} --> {end}\n{text}\n".format(
                 seq=sequence_number,
-                start=self.float_to_srt_time_format(start),
-                end=self.float_to_srt_time_format(end),
+                start=Caption.timestamp_to_srt_time_format(start),
+                end=Caption.timestamp_to_srt_time_format(end),
                 text=caption,
             )
             segments.append(line)
 
         segments: List[str] = []
         root = ElementTree.fromstring(xml_captions)
-        caption: Optional[str] = None
-        prev_p_start: float = 0.0
 
         try:
             child = root.find('body')
             if child is None:
                 raise AssertionError("XML caption doesn't have a <body> tag")
 
-            for i, p in enumerate(child.findall('p')):
+            ps = child.findall('p')
+            for i in range(len(ps)):
+                p = ps[i]
                 start = float(p.attrib["t"])
-                if caption != None:
-                    append_segment(segments, caption, prev_p_start, start, i)
                 text = reduce(lambda acc, s: acc + (s.text or ""), p.findall('s'), "")
                 caption = unescape(text.replace("\n", " ").replace("  ", " "))
-                prev_p_start = start
+                if i + 1 < len(ps):
+                    end = float(ps[i + 1].attrib['t'])
+                else:
+                    end = float(p.attrib['d'])
+                append_segment(segments, caption, start, end, i + 1)
         except:
             traceback.print_exc()
 
@@ -116,7 +184,7 @@ class Caption:
     def download(
         self,
         title: str,
-        srt: bool = True,
+        format: Union[Literal['srt'], Literal['xml'], Literal['txt']] = 'srt',
         output_path: Optional[str] = None,
         filename_prefix: Optional[str] = None,
     ) -> str:
@@ -155,18 +223,22 @@ class Caption:
 
         filename += f" ({self.code})"
 
-        if srt:
+        if format == 'srt':
             filename += ".srt"
-        else:
+        elif format == 'xml':
             filename += ".xml"
+        else:
+            filename += ".txt"
 
         file_path = os.path.join(target_directory(output_path), filename)
 
         with open(file_path, "w", encoding="utf-8") as file_handle:
-            if srt:
+            if format == 'srt':
                 file_handle.write(self.generate_srt_captions())
-            else:
+            elif format == 'xml':
                 file_handle.write(self.xml_captions)
+            else:
+                file_handle.write(self.generate_transcript())
 
         return file_path
 
