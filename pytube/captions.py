@@ -3,7 +3,7 @@ import os
 import time
 import xml.etree.ElementTree as ElementTree
 from html import unescape
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 from pytube import request
 from pytube.helpers import safe_filename, target_directory
@@ -71,18 +71,18 @@ class Caption:
         :param str xml_captions:
             XML formatted caption tracks.
         """
-        segments = []
-        root = ElementTree.fromstring(xml_captions)
-        for i, child in enumerate(list(root)):
-            text = child.text or ""
-            caption = unescape(text.replace("\n", " ").replace("  ", " "),)
-            try:
-                duration = float(child.attrib["dur"])
-            except KeyError:
-                duration = 0.0
-            start = float(child.attrib["start"])
-            end = start + duration
-            sequence_number = i + 1  # convert from 0-indexed to 1.
+
+        import traceback
+        from functools import reduce
+
+        def append_segment(
+            segments: List[str],
+            caption: str,
+            start: float,
+            end: float,
+            sequence_number: int
+        ) -> None:
+
             line = "{seq}\n{start} --> {end}\n{text}\n".format(
                 seq=sequence_number,
                 start=self.float_to_srt_time_format(start),
@@ -90,6 +90,27 @@ class Caption:
                 text=caption,
             )
             segments.append(line)
+
+        segments: List[str] = []
+        root = ElementTree.fromstring(xml_captions)
+        caption: Optional[str] = None
+        prev_p_start: float = 0.0
+
+        try:
+            child = root.find('body')
+            if child is None:
+                raise AssertionError("XML caption doesn't have a <body> tag")
+
+            for i, p in enumerate(child.findall('p')):
+                start = float(p.attrib["t"])
+                if caption != None:
+                    append_segment(segments, caption, prev_p_start, start, i)
+                text = reduce(lambda acc, s: acc + (s.text or ""), p.findall('s'), "")
+                caption = unescape(text.replace("\n", " ").replace("  ", " "))
+                prev_p_start = start
+        except:
+            traceback.print_exc()
+
         return "\n".join(segments).strip()
 
     def download(
