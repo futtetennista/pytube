@@ -100,14 +100,6 @@ class Caption:
         import traceback
         from functools import reduce
 
-        def append_segment(
-            segments: List[str],
-            caption: str,
-        ) -> None:
-
-            line = f"{caption}\n"
-            segments.append(line)
-
         segments: List[str] = []
         root = ElementTree.fromstring(xml_captions)
 
@@ -120,11 +112,11 @@ class Caption:
                 text = reduce(lambda acc, s: acc + (s.text or ""), p.findall('s'), "")
                 caption = unescape(text.replace("\n", " ").replace("  ", " "))
                 if caption != "":
-                   append_segment(segments, caption)
+                    segments.append(caption)
         except:
             traceback.print_exc()
 
-        return "\n".join(segments).strip()
+        return " ".join(segments).strip()
 
     def xml_caption_to_srt(self, xml_captions: str) -> str:
         """Convert xml caption tracks to "SubRip Subtitle (srt)".

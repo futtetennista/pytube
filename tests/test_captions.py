@@ -165,7 +165,6 @@ def test_generate_srt_captions(request):
         '</body>'
         '</timedtext>'
     )
-
     caption = Caption(
         {"url": "url1", "name": {"simpleText": "name1"}, "languageCode": "en", "vssId": ".en"}
     )
